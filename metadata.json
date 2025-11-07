@@ -1,0 +1,4 @@
+{
+  "name": "Exam Result Analyzer",
+  "description": "An interactive web application that allows students to enter marks for different subjects, calculates their total, average, and grade, and visualizes performance using charts. The app also stores and displays past results using LocalStorage for analysis."
+}
