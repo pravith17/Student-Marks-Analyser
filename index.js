@@ -1,3 +1,4 @@
+
 document.addEventListener('DOMContentLoaded', () => {
     // --- STATE MANAGEMENT ---
     let state = {
@@ -5,7 +6,9 @@ document.addEventListener('DOMContentLoaded', () => {
         users: [],                   // { username, name, password, role }
         exams: [],                   // [{ id, name, subjects: [{name, credits}] }]
         marks: {},                   // { examId: { studentUsername: { subjectName: { mse1, mse2, task1, ... } } } }
-        activeCharts: {},        // For student official result charts
+        activeCharts: {},            // For student official result charts
+        analyzerChart: null,         // For the analyzer chart instance
+        analyzerResultData: null,    // To store the latest analyzer result for export
     };
 
     // --- DOM ELEMENT SELECTORS ---
@@ -753,7 +756,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const completedResultIndex = completedResults.findIndex(cr => cr.examId === examId);
         let cgpa = null;
-        if (completedResultIndex > 0) {
+        if (completedResultIndex >= 0) { // Fix: Allow CGPA for first exam too
             const resultsForCgpa = completedResults.slice(0, completedResultIndex + 1);
             cgpa = calculateCumulativeCGPA(resultsForCgpa);
         }
@@ -811,7 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const completedResultIndex = completedResults.findIndex(cr => cr.examId === examId);
         let cgpa = null;
-        if (completedResultIndex > 0) {
+        if (completedResultIndex >= 0) { // Fix: Allow CGPA for first exam too
             const resultsForCgpa = completedResults.slice(0, completedResultIndex + 1);
             cgpa = calculateCumulativeCGPA(resultsForCgpa);
         }
@@ -929,15 +932,124 @@ document.addEventListener('DOMContentLoaded', () => {
         const resultData = calculateSGPA(mockExam, mockMarks);
         renderAnalyzerResult(resultData);
     };
+    const handleAnalyzerResultClick = (e) => {
+        const button = e.target.closest('button');
+        if (!button || !state.analyzerResultData) return;
+    
+        const action = button.dataset.action;
+        if (action === 'export-analyzer-pdf') {
+            handleAnalyzerExportPdf(state.analyzerResultData);
+        } else if (action === 'export-analyzer-csv') {
+            handleAnalyzerExportCsv(state.analyzerResultData);
+        }
+    };
+    const handleAnalyzerExportPdf = (resultData) => {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        doc.setFontSize(20);
+        doc.text('Simulated Result Transcript', 14, 22);
+        doc.setFontSize(12);
+
+        const isFinal = resultData.sgpa !== null;
+        let totalMarksObtained = 0;
+        let totalMarksPossible = 0;
+        resultData.subjectDetails.forEach(s => {
+            if (isFinal) {
+                totalMarksObtained += s.finalPercentage;
+                totalMarksPossible += 100;
+            } else {
+                totalMarksObtained += s.cie;
+                totalMarksPossible += 50;
+            }
+        });
+        const averagePercentage = totalMarksPossible > 0 ? (totalMarksObtained / totalMarksPossible) * 100 : 0;
+        
+        doc.text(`Total Marks: ${totalMarksObtained.toFixed(2)} / ${totalMarksPossible}`, 14, 32);
+        doc.text(`Average: ${averagePercentage.toFixed(2)}%`, 14, 38);
+
+        if (isFinal) {
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`SGPA: ${resultData.sgpa.toFixed(2)}`, 14, 50);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(12);
+            doc.text(`Classification: ${resultData.classification}`, 14, 56);
+        }
+
+        const head = isFinal
+            ? [['Subject', 'Credits', 'CIE (50)', 'SEE (50)', 'Total (100)', 'Grade', 'GP']]
+            : [['Subject', 'Credits', 'CIE (50)']];
+        
+        const body = isFinal
+            ? resultData.subjectDetails.map(s => [s.name, s.credits, s.cie, s.see === -1 ? 'AB' : s.see / 2, s.finalPercentage, s.letter, s.gradePoint])
+            : resultData.subjectDetails.map(s => [s.name, s.credits, s.cie]);
+
+        doc.autoTable({ startY: 65, head, body, theme: 'striped', headStyles: { fillColor: '#1d4ed8' } });
+        doc.save(`SGPA_Analyzer_Result.pdf`);
+    };
+    const handleAnalyzerExportCsv = (resultData) => {
+        const isFinal = resultData.sgpa !== null;
+        let csvContent = "data:text/csv;charset=utf-8,";
+        
+        const headers = isFinal
+            ? ['Subject', 'Credits', 'CIE (50)', 'SEE (50)', 'Total (100)', 'Grade', 'GP']
+            : ['Subject', 'Credits', 'CIE (50)'];
+        csvContent += headers.join(",") + "\r\n";
+    
+        resultData.subjectDetails.forEach(s => {
+            const row = isFinal
+                ? [s.name, s.credits, s.cie, s.see === -1 ? 'AB' : s.see / 2, s.finalPercentage, s.letter, s.gradePoint]
+                : [s.name, s.credits, s.cie];
+            csvContent += row.join(",") + "\r\n";
+        });
+        
+        csvContent += "\r\n";
+        if (isFinal) {
+            csvContent += `SGPA,${resultData.sgpa.toFixed(2)}\r\n`;
+            csvContent += `Classification,"${resultData.classification}"\r\n`;
+        } else {
+             csvContent += `Classification,"${resultData.classification}"\r\n`;
+        }
+    
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `SGPA_Analyzer_Result.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
     const renderAnalyzerResult = (resultData) => {
+        if (state.analyzerChart) {
+            state.analyzerChart.destroy();
+            state.analyzerChart = null;
+        }
+
         if (!resultData) {
             analyzerResultContainer.innerHTML = `<p class="text-red-500">Could not calculate result. Please check your inputs.</p>`;
             analyzerResultContainer.classList.remove('hidden');
             return;
         }
 
+        state.analyzerResultData = resultData;
+        const isFinal = resultData.sgpa !== null;
+
+        let totalMarksObtained = 0;
+        let totalMarksPossible = 0;
+        resultData.subjectDetails.forEach(s => {
+            if (isFinal) {
+                totalMarksObtained += s.finalPercentage;
+                totalMarksPossible += 100;
+            } else {
+                totalMarksObtained += s.cie;
+                totalMarksPossible += 50;
+            }
+        });
+        const averagePercentage = totalMarksPossible > 0 ? (totalMarksObtained / totalMarksPossible) * 100 : 0;
+
         let resultHtml = '';
-        if (resultData.sgpa !== null) {
+        if (isFinal) {
             resultHtml += `<div class="text-center p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
                 <p class="text-lg">Simulated SGPA</p>
                 <p class="text-4xl font-bold text-primary-600 dark:text-primary-400">${resultData.sgpa.toFixed(2)}</p>
@@ -951,36 +1063,85 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         resultHtml += `
-            <h4 class="font-bold text-lg my-4">Simulated Marks Breakdown</h4>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead class="bg-gray-50 dark:bg-gray-700">
-                        <tr>
-                            <th class="px-4 py-2 text-left text-xs font-medium uppercase">Subject</th>
-                            <th class="px-4 py-2 text-center text-xs font-medium uppercase">CIE</th>
-                            <th class="px-4 py-2 text-center text-xs font-medium uppercase">SEE</th>
-                            <th class="px-4 py-2 text-center text-xs font-medium uppercase">Total</th>
-                            <th class="px-4 py-2 text-center text-xs font-medium uppercase">Grade</th>
-                            <th class="px-4 py-2 text-center text-xs font-medium uppercase">GP</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                        ${resultData.subjectDetails.map(s => `
-                            <tr>
-                                <td class="px-4 py-2 font-medium">${s.name}</td>
-                                <td class="px-4 py-2 text-center">${s.cie}</td>
-                                <td class="px-4 py-2 text-center">${s.see === -1 ? 'AB' : s.see === null ? '-' : s.see/2}</td>
-                                <td class="px-4 py-2 text-center">${s.finalPercentage ?? '-'}</td>
-                                <td class="px-4 py-2 text-center font-bold">${s.letter}</td>
-                                <td class="px-4 py-2 text-center">${s.gradePoint ?? '-'}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 my-4">
+                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-center">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Total Marks</p>
+                    <p class="text-xl font-bold">${totalMarksObtained.toFixed(0)} / ${totalMarksPossible}</p>
+                </div>
+                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-center">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Average Percentage</p>
+                    <p class="text-xl font-bold">${averagePercentage.toFixed(2)}%</p>
+                </div>
+                <div class="p-3 flex items-center justify-center space-x-2">
+                     <button class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700" data-action="export-analyzer-pdf">PDF</button>
+                     <button class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700" data-action="export-analyzer-csv">CSV</button>
+                </div>
+            </div>
+        `;
+
+        const tableHeaders = isFinal 
+            ? `<th class="px-4 py-2 text-left text-xs font-medium uppercase">Subject</th>
+               <th class="px-4 py-2 text-center text-xs font-medium uppercase">CIE</th>
+               <th class="px-4 py-2 text-center text-xs font-medium uppercase">SEE</th>
+               <th class="px-4 py-2 text-center text-xs font-medium uppercase">Total</th>
+               <th class="px-4 py-2 text-center text-xs font-medium uppercase">Grade</th>
+               <th class="px-4 py-2 text-center text-xs font-medium uppercase">GP</th>`
+            : `<th class="px-4 py-2 text-left text-xs font-medium uppercase">Subject</th>
+               <th class="px-4 py-2 text-center text-xs font-medium uppercase">Total CIE (50)</th>`;
+
+        const tableBody = resultData.subjectDetails.map(s => isFinal 
+            ? `<tr>
+                <td class="px-4 py-2 font-medium">${s.name}</td>
+                <td class="px-4 py-2 text-center">${s.cie}</td>
+                <td class="px-4 py-2 text-center">${s.see === -1 ? 'AB' : s.see === null ? '-' : s.see/2}</td>
+                <td class="px-4 py-2 text-center">${s.finalPercentage ?? '-'}</td>
+                <td class="px-4 py-2 text-center font-bold">${s.letter}</td>
+                <td class="px-4 py-2 text-center">${s.gradePoint ?? '-'}</td>
+               </tr>`
+            : `<tr>
+                <td class="px-4 py-2 font-medium">${s.name}</td>
+                <td class="px-4 py-2 text-center font-bold">${s.cie}</td>
+               </tr>`
+        ).join('');
+
+        resultHtml += `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h4 class="font-bold text-lg mb-2">Simulated Marks Breakdown</h4>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-700"><tr>${tableHeaders}</tr></thead>
+                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">${tableBody}</tbody>
+                        </table>
+                    </div>
+                </div>
+                 <div>
+                    <h4 class="font-bold text-lg mb-2">Performance Chart</h4>
+                    <canvas id="analyzer-chart"></canvas>
+                </div>
             </div>`;
         
         analyzerResultContainer.innerHTML = resultHtml;
         analyzerResultContainer.classList.remove('hidden');
+
+        const ctx = document.getElementById('analyzer-chart');
+        if (ctx) {
+            state.analyzerChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: resultData.subjectDetails.map(s => s.name),
+                    datasets: [{
+                        label: isFinal ? 'Final Marks (%)' : 'CIE Marks (out of 50)',
+                        data: resultData.subjectDetails.map(s => isFinal ? s.finalPercentage : s.cie),
+                        backgroundColor: chartColors,
+                    }]
+                },
+                options: {
+                    scales: { y: { beginAtZero: true, max: isFinal ? 100 : 50 } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
     };
 
 
@@ -1038,6 +1199,7 @@ document.addEventListener('DOMContentLoaded', () => {
         analyzerAddSubjectBtn.addEventListener('click', addAnalyzerSubjectRow);
         analyzerSubjectsList.addEventListener('click', handleAnalyzerSubjectsClick);
         analyzerForm.addEventListener('submit', handleAnalyzerFormSubmit);
+        analyzerResultContainer.addEventListener('click', handleAnalyzerResultClick);
 
         updateView();
     };
