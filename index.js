@@ -1,17 +1,18 @@
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- STATE MANAGEMENT ---
+    // STATE MANAGEMENT 
     let state = {
-        currentUser: null,           // { username, name, role }
-        users: [],                   // { username, name, password, role }
-        exams: [],                   // [{ id, name, subjects: [{name, credits}] }]
-        marks: {},                   // { examId: { studentUsername: { subjectName: { mse1, mse2, task1, ... } } } }
-        activeCharts: {},            // For student official result charts
-        analyzerChart: null,         // For the analyzer chart instance
-        analyzerResultData: null,    // To store the latest analyzer result for export
+        currentUser: null,           
+        users: [],                   
+        exams: [],                   
+        marks: {},                   
+        activeCharts: {},           
+        analyzerChart: null,        
+        analyzerChartType: 'bar',   
+        analyzerResultData: null,   
     };
 
-    // --- DOM ELEMENT SELECTORS ---
+    // --- DOM ELEMENT SELECTors ---
     const mainHeader = document.getElementById('main-header');
     const welcomeMessage = document.getElementById('welcome-message');
     const logoutBtn = document.getElementById('logout-btn');
@@ -31,6 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const addStudentBtn = document.getElementById('add-student-btn');
     const createExamBtn = document.getElementById('create-exam-btn');
     const examsListEl = document.getElementById('exams-list');
+    const importExamBtn = document.getElementById('import-exam-btn');
+    const csvFileInput = document.getElementById('csv-file-input');
     
     // Modals
     const studentModal = document.getElementById('student-modal');
@@ -52,6 +55,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const marksTableBody = document.getElementById('marks-table-body');
     const cancelMarksModalBtn = document.getElementById('cancel-marks-modal');
 
+    // CSV Import Modal
+    const csvImportModal = document.getElementById('csv-import-modal');
+    const csvImportForm = document.getElementById('csv-import-form');
+    const cancelCsvModalBtn = document.getElementById('cancel-csv-modal');
+    const saveCsvDataBtn = document.getElementById('save-csv-data-btn');
+    const csvErrorContainer = document.getElementById('csv-error-container');
+    const csvExamNameInput = document.getElementById('csv-exam-name');
+    const csvSubjectNameInput = document.getElementById('csv-subject-name');
+    const csvSubjectCreditsInput = document.getElementById('csv-subject-credits');
+    const csvTableHead = document.getElementById('csv-table-head');
+    const csvTableBody = document.getElementById('csv-table-body');
+
     // Student Portal
     const studentDetailsContent = document.getElementById('student-details-content');
     const officialResultsList = document.getElementById('official-results-list');
@@ -67,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
     const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
 
-    // --- CONSTANTS ---
+    //CONSTANTS
     const GRADING_CRITERIA = [
         { min: 90, gradePoint: 10, letter: 'O', descriptor: 'Outstanding' },
         { min: 80, gradePoint: 9, letter: 'A+', descriptor: 'Excellent' },
@@ -84,9 +99,9 @@ document.addEventListener('DOMContentLoaded', () => {
         { min: 5.00, classification: 'Second Class' },
         { min: 0, classification: 'Academic Probation / Non-compliance' }
     ];
-    const chartColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+    const chartColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
     
-    // --- DATA PERSISTENCE ---
+    //DATA PERSISTENCE
     const loadDataFromStorage = () => {
         state.users = JSON.parse(localStorage.getItem('app_users')) || [];
         state.exams = JSON.parse(localStorage.getItem('app_exams')) || [];
@@ -103,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveExams = () => localStorage.setItem('app_exams', JSON.stringify(state.exams));
     const saveMarks = () => localStorage.setItem('app_marks', JSON.stringify(state.marks));
 
-    // --- VIEW MANAGEMENT ---
+    //VIEW MANAGEMENT
     const updateView = () => {
         Object.values(views).forEach(view => view.classList.add('hidden'));
         if (state.currentUser) {
@@ -122,7 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- AUTHENTICATION ---
+    //AUTHENTICATION
     const handleLogin = (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
@@ -146,13 +161,13 @@ document.addEventListener('DOMContentLoaded', () => {
         updateView();
     };
 
-    // --- SGPA & CGPA CALCULATION ENGINE ---
+    //SGPA & CGPA CALCULATION ENGINE
     const getGradeDetails = (percentage, isAbsent = false) => {
         if (isAbsent) return { gradePoint: 0, letter: 'AB', descriptor: 'Absent' };
         for (const criteria of GRADING_CRITERIA) {
             if (percentage >= criteria.min) return criteria;
         }
-        return GRADING_CRITERIA[GRADING_CRITERIA.length - 1]; // Default to Fails
+        return GRADING_CRITERIA[GRADING_CRITERIA.length - 1];
     };
     const getSgpaClassification = (sgpa) => {
         for (const criteria of SGPA_CLASSIFICATION) {
@@ -226,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return totalCredits > 0 ? (totalWeightedGradePoints / totalCredits) : 0;
     };
 
-    // --- TEACHER PORTAL: STUDENT MANAGEMENT ---
+    //TEACHER PORTAL: STUDENT MANAGEMENT
     const renderStudentsTable = () => {
         const students = state.users.filter(u => u.role === 'student');
         if (students.length === 0) {
@@ -314,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (action === 'delete') handleDeleteStudent(username);
     };
 
-    // --- TEACHER PORTAL: EXAM MANAGEMENT ---
+    //TEACHER PORTAL: EXAM MANAGEMENT
     const renderExamsList = () => {
         if (state.exams.length === 0) {
             examsListEl.innerHTML = `<p class="text-center py-4 text-gray-500 dark:text-gray-400">No exams created yet.</p>`;
@@ -428,7 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (action === 'enter-marks') showMarksModal(id);
     };
 
-    // --- TEACHER PORTAL: MARKS MANAGEMENT ---
+    //TEACHER PORTAL: MARKS MANAGEMENT
     const showMarksModal = (examId) => {
         const exam = state.exams.find(e => e.id === examId);
         const students = state.users.filter(u => u.role === 'student');
@@ -525,7 +540,255 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const hideMarksModal = () => marksModal.classList.add('hidden');
 
-    // --- STUDENT DASHBOARD: OFFICIAL RESULTS ---
+    // TEACHER PORTAL: CSV IMPORT
+    const showCsvImportModal = () => csvImportModal.classList.remove('hidden');
+    const hideCsvImportModal = () => csvImportModal.classList.add('hidden');
+
+    const parseCsv = (csvText) => {
+        try {
+            const allRows = csvText.split('\n')
+                .map(row => row.split(',').map(cell => cell.trim()));
+            const examRow = allRows.find(row => row.some(cell => cell.includes('Semester')));
+            const subjectHeaderRow = allRows.find(row => row.includes('Subject') && row.includes('Credit'));
+            const subjectValueRowIndex = allRows.findIndex(row => row.includes('Subject') && row.includes('Credit')) + 1;
+            const subjectValueRow = allRows[subjectValueRowIndex];
+            const headerRowIndex = allRows.findIndex(row => row.includes('Name') && row.includes('USN'));
+
+            if (!examRow || !subjectHeaderRow || !subjectValueRow || headerRowIndex === -1) {
+                throw new Error("Could not find key landmarks in CSV: 'Semester', 'Subject'/'Credit', or 'Name'/'USN' headers.");
+            }
+            const examName = examRow.find(cell => cell.includes('Semester')) || '';
+            const subjectName = subjectValueRow[subjectHeaderRow.indexOf('Subject')] || '';
+            const subjectCredits = parseInt(subjectValueRow[subjectHeaderRow.indexOf('Credit')], 10);
+            const headerRow = allRows[headerRowIndex];
+            const firstHeaderIndex = headerRow.findIndex(cell => cell.length > 0);
+            const headers = headerRow.slice(firstHeaderIndex);
+            
+            const studentDataRows = allRows.slice(headerRowIndex + 1)
+                .filter(row => row.slice(firstHeaderIndex).some(cell => cell.length > 0)); 
+
+            const students = studentDataRows.map(row => {
+                const student = { data: {} };
+                const rowData = row.slice(firstHeaderIndex);
+                headers.forEach((header, i) => {
+                    if (header) { 
+                        student.data[header] = rowData[i] || '';
+                    }
+                });
+                return student;
+            }).filter(s => s.data['USN'] && s.data['Name']); 
+
+            if (!examName || !subjectName || isNaN(subjectCredits) || students.length === 0) {
+                throw new Error("CSV is missing essential data: Exam Name, Subject Name/Credits, or valid student rows.");
+            }
+
+            return { examName, subject: { name: subjectName, credits: subjectCredits }, students, headers };
+
+        } catch (error) {
+            console.error("Error parsing CSV:", error);
+            alert(`Failed to parse CSV file. Please ensure it follows the correct format. Error: ${error.message}`);
+            return null;
+        }
+    };
+    
+    const handleFileSelect = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const csvText = event.target.result;
+            const parsedData = parseCsv(csvText);
+            if (parsedData) {
+                renderCsvImportModal(parsedData);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = ''; 
+    };
+
+    const renderCsvImportModal = (parsedData) => {
+        csvExamNameInput.value = parsedData.examName;
+        csvSubjectNameInput.value = parsedData.subject.name;
+        csvSubjectCreditsInput.value = parsedData.subject.credits;
+
+        csvTableHead.innerHTML = parsedData.headers.map(h => `<th class="px-2 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">${h}</th>`).join('');
+
+        const inputClasses = "w-full p-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500";
+        csvTableBody.innerHTML = parsedData.students.map((student, rowIndex) => `
+            <tr data-row-index="${rowIndex}">
+                ${parsedData.headers.map(header => {
+                    const value = student.data[header] || '';
+                    const isNumeric = !['Name', 'USN'].includes(header);
+                    return `<td class="px-1 py-1"><input type="${isNumeric ? 'text' : 'text'}" data-header="${header}" class="${inputClasses}" value="${value}"></td>`;
+                }).join('')}
+            </tr>
+        `).join('');
+        
+        showCsvImportModal();
+        validateAndRenderCsvErrors();
+    };
+
+    const validateAndRenderCsvErrors = () => {
+        let isValid = true;
+        
+        csvImportModal.querySelectorAll('.border-red-500').forEach(el => el.classList.remove('border-red-500', 'dark:border-red-500'));
+        const markLimits = { 'MSE 1': 20, 'MSE 2': 20, 'Task1': 4, 'Task2': 4, 'Task3': 2, 'SEE': 100 };
+        const usnsInFile = new Set();
+        
+        const markAsInvalid = (el) => {
+            el.classList.add('border-red-500', 'dark:border-red-500');
+            isValid = false;
+        };
+
+        if (!csvExamNameInput.value.trim()) markAsInvalid(csvExamNameInput);
+        if (!csvSubjectNameInput.value.trim()) markAsInvalid(csvSubjectNameInput);
+        if (!csvSubjectCreditsInput.value.trim() || parseInt(csvSubjectCreditsInput.value, 10) < 1) markAsInvalid(csvSubjectCreditsInput);
+
+        csvTableBody.querySelectorAll('tr').forEach(row => {
+            const usnInput = row.querySelector('input[data-header="USN"]');
+            if (usnInput) {
+                const usnValue = usnInput.value.trim();
+                if (usnValue && usnsInFile.has(usnValue)) {
+                    markAsInvalid(usnInput);
+                } else if(usnValue) {
+                    usnsInFile.add(usnValue);
+                }
+            }
+
+            row.querySelectorAll('input').forEach(input => {
+                const header = input.dataset.header;
+                const value = input.value.trim();
+                
+                if (header === 'Name' && !value) markAsInvalid(input);
+                if (header === 'USN' && !value) markAsInvalid(input);
+
+                if (markLimits[header]) {
+                    if (value.toUpperCase() === 'A' && header === 'SEE') {
+                    } else if (value !== '') {
+                         const numValue = parseInt(value, 10);
+                        if (isNaN(numValue) || numValue < 0 || numValue > markLimits[header]) {
+                            markAsInvalid(input);
+                        }
+                    }
+                }
+            });
+        });
+
+        saveCsvDataBtn.disabled = !isValid;
+        csvErrorContainer.classList.toggle('hidden', isValid);
+        return isValid;
+    };
+
+    const handleSaveCsvData = (e) => {
+        e.preventDefault();
+        if (!validateAndRenderCsvErrors()) {
+            alert("Please fix the validation errors before saving.");
+            return;
+        }
+    
+        const examName = csvExamNameInput.value.trim();
+        const subjectName = csvSubjectNameInput.value.trim();
+        const subjectCredits = parseInt(csvSubjectCreditsInput.value, 10);
+        let existingExam = state.exams.find(ex => ex.name.toLowerCase() === examName.toLowerCase());
+        
+        let changesMade = false;
+        let isNewExam = !existingExam;
+        let examId;
+    
+        if (existingExam) {
+            //EXISTING EXAM LOGIC
+            examId = existingExam.id;
+            const existingSubject = existingExam.subjects.find(sub => sub.name.toLowerCase() === subjectName.toLowerCase());
+    
+            if (existingSubject) {
+                if (existingSubject.credits !== subjectCredits) {
+                    existingSubject.credits = subjectCredits;
+                    changesMade = true;
+                }
+            } else {
+                existingExam.subjects.push({ name: subjectName, credits: subjectCredits });
+                changesMade = true;
+            }
+        } else {
+            //NEW EXAM LOGIC
+            const newExam = { id: `exam_${Date.now()}`, name: examName, subjects: [{ name: subjectName, credits: subjectCredits }] };
+            state.exams.push(newExam);
+            existingExam = newExam;
+            examId = newExam.id;
+            changesMade = true;
+        }
+        if (!state.marks[examId]) state.marks[examId] = {};
+    
+        //PROCESS STUDENTS AND MARKS
+        csvTableBody.querySelectorAll('tr').forEach(row => {
+            const studentData = {};
+            row.querySelectorAll('input').forEach(input => {
+                studentData[input.dataset.header] = input.value.trim();
+            });
+    
+            const usn = studentData['USN'];
+            const name = studentData['Name'];
+            
+            if (!usn || !name) return;
+            if (!state.users.some(u => u.username === usn)) {
+                state.users.push({ username: usn, name: name, password: usn, role: 'student' });
+                changesMade = true;
+            }
+            if (!state.marks[examId][usn]) state.marks[examId][usn] = {};
+            
+            const parseVal = (val) => val === '' ? null : parseInt(val, 10);
+            const parseSee = (val) => {
+                if (val === null || val.trim() === '') return null;
+                if (val.trim().toUpperCase() === 'A') return -1;
+                const num = parseInt(val, 10);
+                return isNaN(num) ? null : num;
+            };
+            
+            const newMarks = {
+                mse1: parseVal(studentData['MSE 1']),
+                mse2: parseVal(studentData['MSE 2']),
+                task1: parseVal(studentData['Task1']),
+                task2: parseVal(studentData['Task2']),
+                task3: parseVal(studentData['Task3']),
+                see: parseSee(studentData['SEE'])
+            };
+            if (!isNewExam) {
+                const oldMarks = state.marks[examId][usn]?.[subjectName] || {};
+                if (JSON.stringify(oldMarks) !== JSON.stringify(newMarks)) {
+                    changesMade = true;
+                }
+            }
+            state.marks[examId][usn][subjectName] = newMarks;
+        });
+    
+        //FINAL DECISION AND SAVE
+        if (!changesMade) {
+             alert("No new data to import. The students and marks for this subject already exist with the same values.");
+             return;
+        }
+    
+        saveExams();
+        saveUsers();
+        saveMarks();
+        hideCsvImportModal();
+        renderTeacherDashboard();
+    };
+
+    //STUDENT DASHBOARD: OFFICIAL RESULTS & CHARTS
+    const updateChartToggleStyles = (containerEl, activeType) => {
+        const buttons = containerEl.querySelectorAll('button[data-chart-type]');
+        buttons.forEach(btn => {
+            if (btn.dataset.chartType === activeType) {
+                btn.classList.add('bg-white', 'dark:bg-gray-800', 'shadow-sm', 'text-primary-600', 'dark:text-primary-400', 'font-semibold');
+                btn.classList.remove('bg-transparent', 'text-gray-600', 'dark:text-gray-300');
+            } else {
+                btn.classList.remove('bg-white', 'dark:bg-gray-800', 'shadow-sm', 'text-primary-600', 'dark:text-primary-400', 'font-semibold');
+                btn.classList.add('bg-transparent', 'text-gray-600', 'dark:text-gray-300');
+            }
+        });
+    };
+
     const renderStudentDashboard = () => {
         renderStudentDetails();
         renderOfficialResults();
@@ -540,7 +803,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderOfficialResults = () => {
         const studentUsername = state.currentUser.username;
         
-        Object.values(state.activeCharts).forEach(chart => chart.destroy());
+        Object.values(state.activeCharts).forEach(chartInfo => chartInfo.instance.destroy());
         state.activeCharts = {};
         
         const completedResults = state.exams
@@ -606,7 +869,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         </div>
                         <div>
-                            <h4 class="font-bold text-lg mb-2">Performance Chart</h4>
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="font-bold text-lg">Performance Chart</h4>
+                                <div class="chart-toggle-container flex space-x-1 bg-gray-200 dark:bg-gray-700 p-0.5 rounded-lg">
+                                    <button class="px-3 py-1 text-xs rounded-md" data-action="set-chart-type" data-exam-id="${exam.id}" data-chart-type="bar">Bar</button>
+                                    <button class="px-3 py-1 text-xs rounded-md" data-action="set-chart-type" data-exam-id="${exam.id}" data-chart-type="pie">Pie</button>
+                                </div>
+                            </div>
                             <canvas id="chart-${exam.id}"></canvas>
                         </div>
                     </div>
@@ -691,21 +960,21 @@ document.addEventListener('DOMContentLoaded', () => {
                  if (resultData && resultData.sgpa !== null) {
                     const ctx = document.getElementById(`chart-${exam.id}`);
                     if (ctx) {
-                        state.activeCharts[exam.id] = new Chart(ctx, {
-                            type: 'bar',
-                            data: {
-                                labels: resultData.subjectDetails.map(s => s.name),
-                                datasets: [{
-                                    label: 'Final Marks (%)',
-                                    data: resultData.subjectDetails.map(s => s.finalPercentage),
-                                    backgroundColor: chartColors,
-                                }]
-                            },
-                            options: {
-                                scales: { y: { beginAtZero: true, max: 100 } },
-                                plugins: { legend: { display: false } }
-                            }
-                        });
+                        const chartData = {
+                            labels: resultData.subjectDetails.map(s => s.name),
+                            datasets: [{
+                                label: 'Final Marks (%)',
+                                data: resultData.subjectDetails.map(s => s.finalPercentage),
+                                backgroundColor: chartColors,
+                            }]
+                        };
+                        const chartOptions = {
+                            scales: { y: { beginAtZero: true, max: 100 } },
+                            plugins: { legend: { display: true } }
+                        };
+                        const chartInstance = new Chart(ctx, { type: 'bar', data: chartData, options: chartOptions });
+                        state.activeCharts[exam.id] = { instance: chartInstance, type: 'bar', data: chartData, options: chartOptions };
+                        updateChartToggleStyles(ctx.parentElement, 'bar');
                     }
                  }
             });
@@ -728,6 +997,19 @@ document.addEventListener('DOMContentLoaded', () => {
             handleExportPdf(button.dataset.examId);
         } else if (action === 'export-csv') {
             handleExportCsv(button.dataset.examId);
+        } else if (action === 'set-chart-type') {
+            const examId = button.dataset.examId;
+            const newType = button.dataset.chartType;
+            const chartInfo = state.activeCharts[examId];
+
+            if (chartInfo && chartInfo.type !== newType) {
+                chartInfo.instance.destroy();
+                const ctx = document.getElementById(`chart-${examId}`);
+                const options = (newType === 'pie') ? { plugins: { legend: { display: true } } } : chartInfo.options;
+                const newInstance = new Chart(ctx, { type: newType, data: chartInfo.data, options });
+                state.activeCharts[examId] = { ...chartInfo, instance: newInstance, type: newType };
+                updateChartToggleStyles(button.closest('.chart-toggle-container').parentElement, newType);
+            }
         }
     };
     const handleExportPdf = (examId) => {
@@ -756,7 +1038,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const completedResultIndex = completedResults.findIndex(cr => cr.examId === examId);
         let cgpa = null;
-        if (completedResultIndex >= 0) { // Fix: Allow CGPA for first exam too
+        if (completedResultIndex > 0) {
             const resultsForCgpa = completedResults.slice(0, completedResultIndex + 1);
             cgpa = calculateCumulativeCGPA(resultsForCgpa);
         }
@@ -814,7 +1096,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const completedResultIndex = completedResults.findIndex(cr => cr.examId === examId);
         let cgpa = null;
-        if (completedResultIndex >= 0) { // Fix: Allow CGPA for first exam too
+        if (completedResultIndex > 0) {
             const resultsForCgpa = completedResults.slice(0, completedResultIndex + 1);
             cgpa = calculateCumulativeCGPA(resultsForCgpa);
         }
@@ -844,7 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(link);
     };
 
-    // --- STUDENT DASHBOARD: ANALYZER ---
+    //STUDENT DASHBOARD: ANALYZER
     const renderAnalyzer = () => {
         analyzerSubjectsList.innerHTML = '';
         analyzerResultContainer.classList.add('hidden');
@@ -934,13 +1216,19 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const handleAnalyzerResultClick = (e) => {
         const button = e.target.closest('button');
-        if (!button || !state.analyzerResultData) return;
+        if (!button) return;
     
         const action = button.dataset.action;
         if (action === 'export-analyzer-pdf') {
-            handleAnalyzerExportPdf(state.analyzerResultData);
+            if (state.analyzerResultData) handleAnalyzerExportPdf(state.analyzerResultData);
         } else if (action === 'export-analyzer-csv') {
-            handleAnalyzerExportCsv(state.analyzerResultData);
+            if (state.analyzerResultData) handleAnalyzerExportCsv(state.analyzerResultData);
+        } else if (action === 'set-analyzer-chart-type') {
+            const newType = button.dataset.chartType;
+            if (newType !== state.analyzerChartType) {
+                state.analyzerChartType = newType;
+                renderAnalyzerResult(state.analyzerResultData);
+            }
         }
     };
     const handleAnalyzerExportPdf = (resultData) => {
@@ -1116,7 +1404,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
                  <div>
-                    <h4 class="font-bold text-lg mb-2">Performance Chart</h4>
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="font-bold text-lg">Performance Chart</h4>
+                        <div class="chart-toggle-container flex space-x-1 bg-gray-200 dark:bg-gray-700 p-0.5 rounded-lg">
+                            <button class="px-3 py-1 text-xs rounded-md" data-action="set-analyzer-chart-type" data-chart-type="bar">Bar</button>
+                            <button class="px-3 py-1 text-xs rounded-md" data-action="set-analyzer-chart-type" data-chart-type="pie">Pie</button>
+                        </div>
+                    </div>
                     <canvas id="analyzer-chart"></canvas>
                 </div>
             </div>`;
@@ -1126,26 +1420,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const ctx = document.getElementById('analyzer-chart');
         if (ctx) {
-            state.analyzerChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: resultData.subjectDetails.map(s => s.name),
-                    datasets: [{
-                        label: isFinal ? 'Final Marks (%)' : 'CIE Marks (out of 50)',
-                        data: resultData.subjectDetails.map(s => isFinal ? s.finalPercentage : s.cie),
-                        backgroundColor: chartColors,
-                    }]
-                },
-                options: {
-                    scales: { y: { beginAtZero: true, max: isFinal ? 100 : 50 } },
-                    plugins: { legend: { display: false } }
-                }
-            });
+            const chartData = {
+                labels: resultData.subjectDetails.map(s => s.name),
+                datasets: [{
+                    label: isFinal ? 'Final Marks (%)' : 'CIE Marks (out of 50)',
+                    data: resultData.subjectDetails.map(s => isFinal ? s.finalPercentage : s.cie),
+                    backgroundColor: chartColors,
+                }]
+            };
+            const chartOptions = (state.analyzerChartType === 'pie')
+                ? { plugins: { legend: { display: true } } }
+                : { scales: { y: { beginAtZero: true, max: isFinal ? 100 : 50 } }, plugins: { legend: { display: false } } };
+
+            state.analyzerChart = new Chart(ctx, { type: state.analyzerChartType, data: chartData, options: chartOptions });
+            updateChartToggleStyles(ctx.parentElement, state.analyzerChartType);
         }
     };
 
 
-    // --- THEME MANAGEMENT ---
+    // THEME MANAGEMENT
     const applyTheme = (theme) => {
         if (theme === 'dark') {
             document.documentElement.classList.add('dark');
@@ -1170,7 +1463,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyTheme(theme);
     };
     
-    // --- APP INITIALIZATION ---
+    //APP INITIALIZATION
     const init = () => {
         loadDataFromStorage();
         initializeTheme();
@@ -1190,9 +1483,15 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelExamModalBtn.addEventListener('click', hideExamModal);
         addExamSubjectBtn.addEventListener('click', handleAddExamSubject);
         examSubjectsListEl.addEventListener('click', handleExamSubjectsListClick);
+        importExamBtn.addEventListener('click', () => csvFileInput.click());
+        csvFileInput.addEventListener('change', handleFileSelect);
 
         marksForm.addEventListener('submit', handleMarksFormSubmit);
         cancelMarksModalBtn.addEventListener('click', hideMarksModal);
+
+        csvImportForm.addEventListener('submit', handleSaveCsvData);
+        cancelCsvModalBtn.addEventListener('click', hideCsvImportModal);
+        csvImportModal.addEventListener('input', validateAndRenderCsvErrors);
 
         officialResultsList.addEventListener('click', handleOfficialResultsClick);
 
@@ -1204,7 +1503,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateView();
     };
     
-    // --- GLOBAL HELPER ---
+    //GLOBAL HELPER
     const renderTeacherDashboard = () => {
         renderStudentsTable();
         renderExamsList();
