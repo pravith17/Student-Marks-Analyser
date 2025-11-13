@@ -64,8 +64,12 @@
         <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold text-gray-800 dark:text-white">Manage Exams</h2>
-                <button id="create-exam-btn" class="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:outline-none">Create Exam</button>
+                <div class="flex space-x-2">
+                    <button id="import-exam-btn" class="px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 focus:outline-none">Import from CSV</button>
+                    <button id="create-exam-btn" class="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:outline-none">Create Exam</button>
+                </div>
             </div>
+            <input type="file" id="csv-file-input" class="hidden" accept=".csv">
             <div id="exams-list" class="space-y-3">
                 <!-- Exam list will be rendered here -->
             </div>
@@ -201,6 +205,54 @@
                 <div class="flex justify-end space-x-4 mt-8">
                     <button type="button" id="cancel-marks-modal" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
                     <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700">Save Marks</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for CSV Import and Validation -->
+    <div id="csv-import-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden z-50 p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8 w-full max-w-7xl">
+            <h2 id="csv-modal-title" class="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Import Exam Data</h2>
+            <div id="csv-error-container" class="bg-red-100 dark:bg-red-900/30 border border-red-400 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg relative mb-4 hidden">
+                <strong class="font-bold">Validation Errors!</strong>
+                <span class="block sm:inline">Please correct the highlighted fields before saving.</span>
+            </div>
+            <form id="csv-import-form">
+                <fieldset class="border dark:border-gray-600 p-4 rounded-lg mb-4">
+                    <legend class="px-2 font-semibold">Exam & Subject Details</legend>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label for="csv-exam-name" class="block mb-2 text-sm font-medium">Exam Name</label>
+                            <input type="text" id="csv-exam-name" class="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required>
+                        </div>
+                        <div>
+                            <label for="csv-subject-name" class="block mb-2 text-sm font-medium">Subject Name</label>
+                            <input type="text" id="csv-subject-name" class="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required>
+                        </div>
+                        <div>
+                            <label for="csv-subject-credits" class="block mb-2 text-sm font-medium">Subject Credits</label>
+                            <input type="number" id="csv-subject-credits" class="w-full p-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg" required min="1">
+                        </div>
+                    </div>
+                </fieldset>
+
+                <h3 class="font-semibold mb-2 mt-6">Student Marks</h3>
+                <div class="max-h-[50vh] overflow-auto">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border dark:border-gray-600">
+                        <thead class="bg-gray-100 dark:bg-gray-700 sticky top-0 z-10">
+                           <tr id="csv-table-head">
+                               <!-- CSV headers here -->
+                           </tr>
+                        </thead>
+                        <tbody id="csv-table-body" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            <!-- CSV student rows here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex justify-end space-x-4 mt-8">
+                    <button type="button" id="cancel-csv-modal" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
+                    <button type="submit" id="save-csv-data-btn" class="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed">Save Imported Data</button>
                 </div>
             </form>
         </div>
